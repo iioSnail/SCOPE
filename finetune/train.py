@@ -3,6 +3,10 @@
 import argparse
 import json
 import os
+import sys
+sys.path.insert(1, os.path.abspath("."))
+sys.path.insert(1, os.path.abspath(".."))
+
 import random
 from functools import partial
 from attr import has
