@@ -8,6 +8,11 @@ Source code for the paper "Improving Chinese Spelling Check by Character Pronunc
 - Cuda: 11.7 (NVIDIA GeForce RTX 3090)
 - Packages: `pip install -r requirements.txt`
 
+```
+conda create -n scope python=3.8
+conda activate scope
+```
+
 ## Data
 
 ### Raw Data
