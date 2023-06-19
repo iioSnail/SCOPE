@@ -18,3 +18,6 @@ CUDA_VISIBLE_DEVICES=1  python -u finetune/predict.py \
   --save_path $OUTPUT_DIR \
   --label_file $DATA_DIR/test.sighan15.lbl.tsv \
   --gpus=0,
+
+
+# python finetune/predict.py --bert_path ./FPT --ckpt_path --data_dir outputs --save_path outputs

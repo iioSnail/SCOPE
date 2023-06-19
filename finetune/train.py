@@ -137,6 +137,7 @@ class CSCTask(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """"""
+        # ' '.join([self.tokenizer.id_to_token(id) for id in batch[0][0]])
         loss = self.compute_loss(batch)
         tf_board_logs = {
             "train_loss": loss.item(),
@@ -267,7 +268,7 @@ class CSCTask(pl.LightningModule):
 
     def test15_dataloader(self):
         dataset = TestCSCDataset(
-            data_path='data/test.sighan15.pkl',
+            data_path='./data/test.sighan15.pkl',
             chinese_bert_path=self.args.bert_path,
             max_length=self.args.max_length,
         )
@@ -285,26 +286,33 @@ class CSCTask(pl.LightningModule):
         return dataloader
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        # 注意，这里一个batch是一条句子。即一次预测一句
         input_ids, pinyin_ids, labels, pinyin_labels, ids, srcs, tokens_size = batch
         mask = (input_ids != 0) * (input_ids != 101) * (input_ids != 102).long()
         batch_size, length = input_ids.shape
         pinyin_ids = pinyin_ids.view(batch_size, length, 8)
+        # 第一遍：进行前向传递，然后argmax求出每个token的index
         logits = self.forward(input_ids=input_ids, pinyin_ids=pinyin_ids).logits
         predict_scores = F.softmax(logits, dim=-1)
         predict_labels = torch.argmax(predict_scores, dim=-1) * mask
         
-
+        # 如果测试集是sighan13，则不对“地”和“得”这两个字进行预测
         if '13' in self.args.label_file:
             predict_labels[(predict_labels == self.tokenizer.token_to_id('地')) | (predict_labels == self.tokenizer.token_to_id('得'))] = \
                 input_ids[(predict_labels == self.tokenizer.token_to_id('地')) | (predict_labels == self.tokenizer.token_to_id('得'))]
-        
+
+        # 保存一下第一次预测的结果
         pre_predict_labels = predict_labels
+
+        # 进行第二次预测（可以重复多次）
         for _ in range(1):
-            record_index = []
+            record_index = []   # 记录上次预测结果中对哪个token进行了修改
+            # 遍历input和pred，找出修改了的token对应的index
             for i,(a,b) in enumerate(zip(list(input_ids[0,1:-1]),list(predict_labels[0,1:-1]))):
                 if a!=b:
                     record_index.append(i)
-            
+
+            # 用第一次的预测结果作为输入，然后再预测一次
             input_ids[0,1:-1] = predict_labels[0,1:-1]
             sent, new_pinyin_ids = decode_sentence_and_get_pinyinids(input_ids[0,1:-1].cpu().numpy().tolist())
             if new_pinyin_ids.shape[1] == input_ids.shape[1]:
@@ -313,22 +321,29 @@ class CSCTask(pl.LightningModule):
             # print(input_ids.device, pinyin_ids.device)
             logits = self.forward(input_ids=input_ids, pinyin_ids=pinyin_ids).logits
             predict_scores = F.softmax(logits, dim=-1)
+            # 得到第二次的预测结果
             predict_labels = torch.argmax(predict_scores, dim=-1) * mask
 
+            # 遍历本次的预测结果的每个token
             for i,(a,b) in enumerate(zip(list(input_ids[0,1:-1]),list(predict_labels[0,1:-1]))):
+                # 若这个token被修改了，且在窗口范围内，则什么都不做。
                 if a!=b and any([abs(i-x)<=1 for x in record_index]):
                     print(ids,srcs)
                     print(i+1,)
                 else:
+                    # 若 a==b ，则执行 predict_labels[0,i+1] = input_ids[0,i+1] 和不执行是一样的
+                    # 若 a==b and any(...) == False: 那么表示该token进行了修改，但不在窗口范围内，则恢复到原本的样子
                     predict_labels[0,i+1] = input_ids[0,i+1]
+
+            # TODO，没看懂这个break是想干嘛
             if predict_labels[0,i+1] == input_ids[0,i+1]:
                 break
+            # 如果测试集是sighan13，则不对“地”和“得”这两个字进行预测
             if '13' in self.args.label_file:
                 predict_labels[(predict_labels == self.tokenizer.token_to_id('地')) | (predict_labels == self.tokenizer.token_to_id('得'))] = \
                     input_ids[(predict_labels == self.tokenizer.token_to_id('地')) | (predict_labels == self.tokenizer.token_to_id('得'))]
-        # if not pre_predict_labels.equal(predict_labels):
-        #     print([self.tokenizer.id_to_token(id) for id in pre_predict_labels[0][1:-1]])
-        #     print([self.tokenizer.id_to_token(id) for id in predict_labels[0][1:-1]])
+
+        # 返回预测结果
         return {
             "tgt_idx": labels.cpu(),
             "post_pred_idx": predict_labels.cpu(),
@@ -415,7 +430,8 @@ def main():
         json.dump(args_dict, f, indent=4)
 
     trainer = Trainer.from_argparse_args(
-        args, callbacks=[checkpoint_callback], logger=logger
+        args, callbacks=[checkpoint_callback], logger=logger,
+        num_sanity_val_steps=0,
     )
 
     trainer.fit(model)

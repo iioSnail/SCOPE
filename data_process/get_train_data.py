@@ -218,7 +218,5 @@ if __name__ == '__main__':
         max_len=args.max_len,
     )
 """
-python data_process/get_train_data.py \
-    --data_path data \
-    --output_dir data
+python data_process/get_train_data.py --data_path data --output_dir data
 """
