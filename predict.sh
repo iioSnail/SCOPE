@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
+REPO_PATH=../SCOPE
+export PYTHONPATH="$PYTHONPATH:$REPO_PATH"
+
 ckpt_path=outputs/checkpoint/epoch=29-df=80.2158-cf=78.5971.ckpt
 
 OUTPUT_DIR=outputs/predict
