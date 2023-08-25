@@ -126,7 +126,7 @@ class ChineseBertTokenizer(BertTokenizerFast):
             for i, sentence in enumerate(text):
                 offsets = encoding.offset_mapping[i].tolist()
                 tokens = self.sentence_to_tokens(sentence, offsets)
-                pinyin_ids.append(self.convert_sentence_to_pinyin_ids(text, tokens, offsets))
+                pinyin_ids.append(self.convert_sentence_to_pinyin_ids(sentence, tokens, offsets))
 
         if torch.is_tensor(encoding.input_ids):
             pinyin_ids = torch.LongTensor(pinyin_ids)
