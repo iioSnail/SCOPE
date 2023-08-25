@@ -121,7 +121,7 @@ class ChineseBertTokenizer(BertTokenizerFast):
             tokens = self.sentence_to_tokens(text, offsets)
             pinyin_ids = [self.convert_sentence_to_pinyin_ids(text, tokens, offsets)]
 
-        if type(text) == list:
+        if type(text) == list or type(text) == tuple:
             pinyin_ids = []
             for i, sentence in enumerate(text):
                 offsets = encoding.offset_mapping[i].tolist()
