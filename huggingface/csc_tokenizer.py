@@ -108,7 +108,7 @@ class ChineseBertTokenizer(BertTokenizerFast):
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
-            return_offsets_mapping=return_offsets_mapping,
+            return_offsets_mapping=True,
             return_length=return_length,
             verbose=verbose,
         )
@@ -117,61 +117,34 @@ class ChineseBertTokenizer(BertTokenizerFast):
 
         pinyin_ids = None
         if type(text) == str:
-            pinyin_ids = self.convert_ids_to_pinyin_ids(input_ids)
+            offsets = encoding.offset_mapping[0].tolist()
+            tokens = self.sentence_to_tokens(text, offsets)
+            pinyin_ids = [self.convert_sentence_to_pinyin_ids(text, tokens, offsets)]
 
         if type(text) == list:
             pinyin_ids = []
-            for ids in input_ids:
-                pinyin_ids.append(self.convert_ids_to_pinyin_ids(ids))
+            for i, sentence in enumerate(text):
+                offsets = encoding.offset_mapping[i].tolist()
+                tokens = self.sentence_to_tokens(sentence, offsets)
+                pinyin_ids.append(self.convert_sentence_to_pinyin_ids(text, tokens, offsets))
 
         if torch.is_tensor(encoding.input_ids):
             pinyin_ids = torch.LongTensor(pinyin_ids)
 
         encoding['pinyin_ids'] = pinyin_ids
 
+        if not return_offsets_mapping:
+            del encoding['offset_mapping']
+
         return encoding
 
-    def tokenize_sentence(self, sentence):
-        # convert sentence to ids
-        tokenizer_output = self.tokenizer.encode(sentence)
-        bert_tokens = tokenizer_output.ids
-        pinyin_tokens = self.convert_sentence_to_pinyin_ids(sentence, tokenizer_output)
-        # assert，token nums should be same as pinyin token nums
-        assert len(bert_tokens) <= self.max_length
-        assert len(bert_tokens) == len(pinyin_tokens)
-        # convert list to tensor
-        input_ids = torch.LongTensor(bert_tokens)
-        pinyin_ids = torch.LongTensor(pinyin_tokens).view(-1)
-        return input_ids, pinyin_ids
+    def sentence_to_tokens(self, sentence, offsets):
+        tokens = []
+        for start, end in offsets:
+            tokens.append(sentence[start:end])
+        return tokens
 
-    def convert_ids_to_pinyin_ids(self, ids: List[int]):
-        pinyin_ids = []
-        tokens = self.convert_ids_to_tokens(ids)
-        for token in tokens:
-            if len(token) > 1:
-                pinyin_ids.append([0] * 8)
-                continue
-
-            pinyin_string = pinyin(token, style=Style.TONE3, errors=lambda x: [['not chinese'] for _ in x])[0][0]
-
-            if pinyin_string == "not chinese":
-                pinyin_ids.append([0] * 8)
-                continue
-
-            if pinyin_string in self.pinyin2tensor:
-                pinyin_ids.append(self.pinyin2tensor[pinyin_string])
-            else:
-                ids = [0] * 8
-                for i, p in enumerate(pinyin_string):
-                    if p not in self.pinyin_dict["char2idx"]:
-                        ids = [0] * 8
-                        break
-                    ids[i] = self.pinyin_dict["char2idx"][p]
-                pinyin_ids.append(pinyin_ids)
-
-        return pinyin_ids
-
-    def convert_sentence_to_pinyin_ids(self, sentence: str, tokenizer_output: tokenizers.Encoding) -> List[List[int]]:
+    def convert_sentence_to_pinyin_ids(self, sentence: str, tokens, offsets):
         # get pinyin of a sentence
         pinyin_list = pinyin(sentence, style=Style.TONE3, heteronym=True, errors=lambda x: [['not chinese'] for _ in x])
         pinyin_locs = {}
@@ -194,7 +167,7 @@ class ChineseBertTokenizer(BertTokenizerFast):
 
         # find chinese character location, and generate pinyin ids
         pinyin_ids = []
-        for idx, (token, offset) in enumerate(zip(tokenizer_output.tokens, tokenizer_output.offsets)):
+        for idx, (token, offset) in enumerate(zip(tokens, offsets)):
             if offset[1] - offset[0] != 1:
                 pinyin_ids.append([0] * 8)
                 continue

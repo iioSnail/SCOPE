@@ -60,6 +60,9 @@ class TestCSCDataset(ChineseBertDataset):
         sentence=self.data[idx]['src']
         tokenizer_output = self.tokenizer.encode(sentence)
         bert_tokens = tokenizer_output.ids
+        if len(bert_tokens) - 2 != len(sentence):
+            print(sentence)
+
         pinyin_tokens = self.convert_sentence_to_pinyin_ids(sentence, tokenizer_output)
         # assert
         assert len(bert_tokens) <= self.max_length

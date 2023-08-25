@@ -1,4 +1,6 @@
 import os
+import shutil
+from pathlib import Path
 
 import torch
 from transformers import BertConfig
@@ -6,14 +8,26 @@ from transformers import BertConfig
 from huggingface.csc_model import ChineseBertForCSC
 from huggingface.csc_tokenizer import ChineseBertTokenizer
 
+FPT_path = Path("../FPT")  # 作者提供的FPT文件
+ckpt_path = Path("../ckpt/scope.ckpt")  # 训练出来的ckpt文件
 source_path = "./ChineseBERT-for-csc"
 output_path = "./iioSnail/ChineseBERT-for-csc"
+if os.path.exists(output_path):
+    shutil.rmtree(output_path)
 os.makedirs(output_path, exist_ok=True)
+
+if not os.path.exists(FPT_path):
+    print("[ERROR] 未找到 FPT 文件夹，请先下载后放在根目录!")
+    exit(0)
 
 
 def load_tokenizer():
     tokenizer = ChineseBertTokenizer.from_pretrained(source_path)
     return tokenizer
+
+
+def copy_files():
+    shutil.copytree(FPT_path / 'config', Path(output_path) / 'config')
 
 
 def load_model():
@@ -48,18 +62,32 @@ def load_model():
     })
 
     model = ChineseBertForCSC(config)
-    state = torch.load("scope.ckpt", map_location="cpu")
+    state = torch.load(ckpt_path, map_location="cpu")
     model.load_state_dict(state['state_dict'], strict=False)
 
     return model
 
 
 def _test_model(tokenizer, model):
-    inputs = tokenizer(["我喜欢吃平果"], return_tensors='pt')
+    inputs = tokenizer("我喜欢吃平果", return_tensors='pt')
     output_hidden = model(**inputs).logits
     print(tokenizer.convert_ids_to_tokens(output_hidden.argmax(-1)[0, 1:-1]))
     print(output_hidden.size())
     print("-" * 30)
+
+def _test_model2(tokenizer, model):
+    inputs = tokenizer(["在补习班他昨天晚上到夜里两点才读书，所以他一回加就累得睡觉了。", "我喜欢吃平果"],
+                       padding=True,
+                       max_length=10,
+                       truncation=True,
+                       return_tensors='pt')
+    output_hidden = model(**inputs).logits
+    print(tokenizer.convert_ids_to_tokens(output_hidden.argmax(-1)[0, 1:-1]))
+    print(tokenizer.convert_ids_to_tokens(output_hidden.argmax(-1)[1, 1:-1]))
+    print(output_hidden.size())
+    print("-" * 30)
+
+
 
 
 def export_tokenizer(tokenizer):
@@ -75,8 +103,10 @@ def export_model(model):
 
 def main():
     tokenizer = load_tokenizer()
+    copy_files()
     model = load_model()
     _test_model(tokenizer, model)
+    _test_model2(tokenizer, model)
     export_tokenizer(tokenizer)
     export_model(model)
     print("Export success!")
